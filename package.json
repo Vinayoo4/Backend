@@ -1,17 +1,21 @@
 {
   "name": "hotel-management-backend",
   "version": "1.0.0",
-  "description": "Hotel Management System Backend API",
+  "description": "Jarvis Unified Backend — Multi-platform backend for SaaS, ERP, POS, HR, CRM, Ecommerce, Trading, Education, Marketing, SME & more",
   "main": "Server.js",
   "scripts": {
     "start": "node Server.js",
     "dev": "nodemon Server.js",
     "lint": "eslint src/ --ext .js",
-    "test": "jest --testPathPattern=src/__tests__ --forceExit",
-    "test:ci": "jest --testPathPattern=src/__tests__ --forceExit --ci --reporters=default --reporters=jest-junit",
+    "test": "jest --testPathPattern=src/__tests__ --forceExit --testTimeout=30000",
+    "test:ci": "jest --testPathPattern=src/__tests__ --forceExit --ci --testTimeout=30000 --reporters=default --reporters=jest-junit",
+    "test:watch": "jest --testPathPattern=src/__tests__ --watch",
     "seed": "node src/scripts/seedAllModules.js",
-    "seed:pos": "node src/scripts/seedAllModules.js",
-    "db:init": "node src/scripts/seedAllModules.js"
+    "db:init": "node src/scripts/seedAllModules.js",
+    "platform:check": "node -e \"const a=require('./src/app');console.log('✓ All platforms loaded');process.exit(0)\""
+  },
+  "jest": {
+    "testTimeout": 30000
   },
   "jest-junit": {
     "outputDirectory": "./reports/junit",

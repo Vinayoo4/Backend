@@ -50,6 +50,15 @@ const agencyRoutes = require('./modules/agency/routes');
 const examRoutes = require('./modules/exam/routes');
 const dashboardRoutes = require('./modules/dashboard/routes');
 
+// Unified API Gateway
+const { gatewayRouter } = require('./gateway');
+
+// Integrated Platform Routes
+const saltedhashRoutes = require('./platforms/saltedhash');
+const nextdoorRoutes = require('./platforms/nextdoor');
+const smeInvoiceRoutes = require('./platforms/sme-invoice');
+const smeSyncRoutes = require('./platforms/sme-sync');
+
 // Jarvis: audit middleware (Deliverable F)
 const auditMiddleware = require('./middlewares/auditMiddleware');
 const requestId = require('./middlewares/requestIdMiddleware');
@@ -426,6 +435,15 @@ app.use(`/api/${apiVersion}/pos`, apiLimiter, posRoutes);
 app.use(`/api/${apiVersion}/agency`, apiLimiter, agencyRoutes);
 app.use(`/api/${apiVersion}/exam`, apiLimiter, examRoutes);
 app.use(`/api/${apiVersion}/dashboard`, apiLimiter, dashboardRoutes);
+
+// ── Unified API Gateway ─────────────────────────────────────────────────
+app.use('/api/gateway', gatewayRouter);
+
+// ── Integrated Platform Routes ──────────────────────────────────────────
+app.use(`/api/${apiVersion}/platform/saltedhash`, apiLimiter, saltedhashRoutes);
+app.use(`/api/${apiVersion}/platform/nextdoor`, apiLimiter, nextdoorRoutes);
+app.use(`/api/${apiVersion}/platform/sme-invoice`, apiLimiter, smeInvoiceRoutes);
+app.use(`/api/${apiVersion}/platform/sme-sync`, apiLimiter, smeSyncRoutes);
 
 // ==========================================
 // ERROR HANDLING MIDDLEWARE

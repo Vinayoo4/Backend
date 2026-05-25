@@ -3,17 +3,34 @@
   "builds": [
     {
       "src": "Server.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": [
+          "data/**",
+          "src/**",
+          "libs/**",
+          "gateway-config.json"
+        ]
+      }
     }
   ],
   "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "Server.js"
-    }
+    { "src": "/health", "dest": "Server.js" },
+    { "src": "/api/gateway/(.*)", "dest": "Server.js" },
+    { "src": "/api/v1/(.*)", "dest": "Server.js" },
+    { "src": "/uploads/(.*)", "dest": "Server.js" },
+    { "src": "/(.*)", "dest": "Server.js" }
   ],
   "env": {
-    "NODE_ENV": "production"
+    "NODE_ENV": "production",
+    "USE_JSON_DB": "true",
+    "TRUST_PROXY": "true",
+    "COMPRESSION_LEVEL": "6"
   },
-  "notes": "Socket.IO has limited support on Vercel serverless functions. For full real-time support, use a dedicated WebSocket server or Vercel Edge Runtime."
+  "functions": {
+    "api/**/*.js": {
+      "maxDuration": 30,
+      "memory": 1024
+    }
+  }
 }

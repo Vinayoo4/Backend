@@ -1,0 +1,81 @@
+{
+  "version": "2.0.0",
+  "name": "Jarvis Unified Backend Gateway",
+  "platforms": {
+    "saltedhash": {
+      "active": true,
+      "basePath": "/api/v1/platform/saltedhash",
+      "tenantSupport": true
+    },
+    "nextdoor": {
+      "active": true,
+      "basePath": "/api/v1/platform/nextdoor",
+      "tenantSupport": true
+    },
+    "sme-invoice": {
+      "active": true,
+      "basePath": "/api/v1/platform/sme-invoice",
+      "tenantSupport": true
+    },
+    "sme-sync": {
+      "active": true,
+      "basePath": "/api/v1/platform/sme-sync",
+      "tenantSupport": true
+    },
+    "pos": {
+      "active": true,
+      "basePath": "/api/v1/pos",
+      "tenantSupport": true
+    },
+    "exam": {
+      "active": true,
+      "basePath": "/api/v1/exam",
+      "tenantSupport": false
+    },
+    "agency": {
+      "active": true,
+      "basePath": "/api/v1/agency",
+      "tenantSupport": false
+    },
+    "university": {
+      "active": true,
+      "basePath": "/api/v1/university",
+      "tenantSupport": false
+    },
+    "ecommerce": {
+      "active": true,
+      "basePath": "/api/v1/ecommerce",
+      "tenantSupport": false
+    },
+    "erp": {
+      "active": true,
+      "basePath": "/api/v1/erp",
+      "tenantSupport": false
+    },
+    "crm": {
+      "active": true,
+      "basePath": "/api/v1/crm",
+      "tenantSupport": false
+    },
+    "hr": {
+      "active": true,
+      "basePath": "/api/v1/hr",
+      "tenantSupport": false
+    },
+    "marketing": {
+      "active": true,
+      "basePath": "/api/v1/marketing",
+      "tenantSupport": false
+    },
+    "trading": {
+      "active": true,
+      "basePath": "/api/v1/trading",
+      "tenantSupport": false
+    },
+    "portfolio": {
+      "active": true,
+      "basePath": "/api/v1/portfolio",
+      "tenantSupport": false
+    }
+  }
+}
