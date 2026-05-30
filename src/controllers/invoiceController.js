@@ -11,6 +11,10 @@ const logger = require('../config/logger');
 const mongoose = require('mongoose');
 const { escapeRegex, sanitizeSortField } = require('../utils/sanitize');
 
+const emailService = require('../services/emailService');
+const pdfService = require('../services/pdfService');
+
+
 /**
  * Generate unique invoice number
  * Format: INV-YYYYMMDD-XXXX
@@ -634,6 +638,61 @@ const generateInvoicePDF = async (req, res) => {
  * @route   PUT /api/v1/invoices/:id/mark-paid
  * @access  Private (manage_invoices)
  */
+
+/**
+ * @desc    Send invoice via email
+ * @route   POST /api/v1/invoices/:id/send-email
+ * @access  Private (manage_invoices)
+ */
+const sendInvoiceEmail = async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid invoice ID'
+      });
+    }
+
+    const invoice = await Invoice.findById(req.params.id)
+      .populate('guest', 'name email phone address')
+      .populate('booking', 'bookingNumber checkInDate checkOutDate')
+      .populate('createdBy', 'name')
+      .lean();
+
+    if (!invoice) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invoice not found'
+      });
+    }
+
+    const { email } = req.body;
+
+    // Generate the PDF buffer using pdfService
+    const pdfBuffer = await pdfService.generateInvoicePdf(invoice);
+
+    // Send the email with the attached PDF buffer
+    const emailSent = await emailService.sendInvoiceEmail(email, invoice, pdfBuffer);
+
+    if (emailSent) {
+      res.status(200).json({ success: true, message: 'Invoice sent successfully' });
+    } else {
+      res.status(500).json({ success: false, message: 'Failed to send invoice email' });
+    }
+  } catch (error) {
+    logger.error('Send invoice email error:', {
+      error: error.message,
+      invoiceId: req.params.id
+    });
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send invoice email',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 const markAsPaid = async (req, res) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -774,6 +833,7 @@ module.exports = {
   updateInvoice,
   deleteInvoice,
   generateInvoicePDF,
+  sendInvoiceEmail,
   markAsPaid,
   markAsCancelled,
 };

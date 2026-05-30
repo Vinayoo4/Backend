@@ -12,9 +12,9 @@ const {
   createInvoice,
   updateInvoice,
   deleteInvoice,
-  generateInvoicePDF
+  generateInvoicePDF,
+  sendInvoiceEmail
   // TODO: Implement these functions in invoiceController.js
-  // sendInvoiceEmail,
   // getOverdueInvoices,
   // getInvoiceStatistics,
   // addPaymentToInvoice,
@@ -206,7 +206,7 @@ const _paymentValidation = [
   handleValidationErrors
 ];
 
-const _emailInvoiceValidation = [
+const emailInvoiceValidation = [
   param('id')
     .isMongoId()
     .withMessage('Invalid invoice ID'),
@@ -477,7 +477,7 @@ router.delete(
 // );
 
 // ========== Payment Routes ==========
-// TODO: Implement this function in invoiceController.js
+
 
 // /**
 //  * @route   POST /api/v1/invoices/:id/payments
@@ -505,17 +505,16 @@ router.get(
   generateInvoicePDF
 );
 
-// TODO: Implement this function in invoiceController.js
-// /**
-//  * @route   POST /api/v1/invoices/:id/send-email
-//  * @desc    Send invoice via email
-//  * @access  Private (manage_invoices)
-//  */
-// router.post(
-//   '/:id/send-email',
-//   authorize('manage_invoices'),
-//   emailInvoiceValidation,
-//   sendInvoiceEmail
-// );
+/**
+ * @route   POST /api/v1/invoices/:id/send-email
+ * @desc    Send invoice via email
+ * @access  Private (manage_invoices)
+ */
+router.post(
+  '/:id/send-email',
+  authorize('manage_invoices'),
+  emailInvoiceValidation,
+  sendInvoiceEmail
+);
 
 module.exports = router;

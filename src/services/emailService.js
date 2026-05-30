@@ -175,7 +175,7 @@ const sendBookingConfirmation = async (email, booking, guest, room) => {
   const nights = booking?.checkInDate && booking?.checkOutDate
     ? Math.ceil((new Date(booking.checkOutDate) - new Date(booking.checkInDate)) / 86400000)
     : '—';
-  const total = booking?.totalAmount != null
+  const total = booking?.totalAmount !== null && booking?.totalAmount !== undefined
     ? `₹${Number(booking.totalAmount).toLocaleString('en-IN')}`
     : 'N/A';
   const subject = `Booking Confirmed — Room ${roomNum}`;
@@ -206,6 +206,35 @@ const sendBookingConfirmation = async (email, booking, guest, room) => {
  * @param {string} adminEmail
  * @param {Buffer} zipBuffer  - ZIP file buffer
  */
+
+/**
+ * Send an invoice email with a PDF attachment.
+ * @param {string} email
+ * @param {object} invoice
+ * @param {Buffer} pdfBuffer
+ */
+const sendInvoiceEmail = async (email, invoice, pdfBuffer) => {
+  const invoiceNumber = invoice.invoiceNumber || invoice._id;
+  const subject = `Invoice ${invoiceNumber} from ${process.env.HOTEL_NAME || 'Hotel Management System'}`;
+  const body = `
+    <p>Hi,</p>
+    <p>Please find attached your invoice <strong>${invoiceNumber}</strong>.</p>
+    <p>Thank you for your business!</p>`;
+  return sendMail({
+    to: email,
+    subject,
+    text: `Please find attached your invoice ${invoiceNumber}.`,
+    html: htmlWrapper(subject, body),
+    attachments: [
+      {
+        filename: `invoice-${invoiceNumber}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf',
+      },
+    ],
+  });
+};
+
 const sendDataBackupEmail = async (adminEmail, zipBuffer) => {
   const now = new Date().toISOString().replace(/[:.]/g, '-');
   const subject = `[Backup] Hotel Data Backup — ${new Date().toLocaleDateString('en-IN')}`;
@@ -258,4 +287,5 @@ module.exports = {
   sendBookingConfirmation,
   sendDataBackupEmail,
   sendAlertEmail,
+  sendInvoiceEmail,
 };
