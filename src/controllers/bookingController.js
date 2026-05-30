@@ -138,6 +138,111 @@ const getBookings = async (req, res) => {
 };
 
 /**
+ * @desc    Search bookings by confirmation number, guest name, etc.
+ * @route   GET /api/v1/bookings/search
+ * @access  Private (manage_bookings, view_bookings)
+ */
+const searchBookings = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      q,
+      status
+    } = req.query;
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Build base query
+    const query = {};
+
+    // Status filter
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    if (q) {
+      const Guest = require('../models/Guest');
+      const Room = require('../models/Room');
+
+      const guestQuery = {
+        $or: [
+          { name: { $regex: q, $options: 'i' } },
+          { email: { $regex: q, $options: 'i' } },
+          { phone: { $regex: q, $options: 'i' } }
+        ]
+      };
+      const guests = await Guest.find(guestQuery).select('_id').lean();
+      const guestIds = guests.map(g => g._id);
+
+      const roomQuery = { number: { $regex: q, $options: 'i' } };
+      const rooms = await Room.find(roomQuery).select('_id').lean();
+      const roomIds = rooms.map(r => r._id);
+
+      query.$or = [
+        { confirmationNumber: { $regex: q, $options: 'i' } },
+        { guest: { $in: guestIds } },
+        { room: { $in: roomIds } }
+      ];
+    }
+
+    const total = await Booking.countDocuments(query);
+
+    // Fetch matching bookings with pagination at the database level
+    const bookings = await Booking.find(query)
+      .populate('guest', 'name email phone')
+      .populate('room', 'number type images')
+      .populate('createdBy', 'name email')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    // Transform data for frontend
+    let transformedBookings = bookings.map(booking => ({
+      id: booking._id,
+      bookingNumber: booking.confirmationNumber || `BK${booking._id.toString().slice(-6).toUpperCase()}`,
+      guestName: booking.guest?.name || 'Unknown Guest',
+      guestEmail: booking.guest?.email || '',
+      guestPhone: booking.guest?.phone || '',
+      roomNumber: booking.room?.number || 'N/A',
+      roomType: booking.room?.type || 'N/A',
+      roomImage: booking.room?.images?.[0] || null,
+      checkIn: booking.checkInDate,
+      checkOut: booking.checkOutDate,
+      status: booking.status,
+      totalAmount: booking.totalAmount,
+      paidAmount: booking.paidAmount || 0,
+      pendingAmount: booking.totalAmount - (booking.paidAmount || 0),
+      adults: booking.adults,
+      children: booking.children,
+      source: booking.source || 'direct',
+      createdAt: booking.createdAt
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        bookings: transformedBookings,
+        pagination: {
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          pages: Math.ceil(total / parseInt(limit))
+        }
+      }
+    });
+  } catch (error) {
+    logger.error('Search bookings error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to search bookings',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
  * @desc    Get single booking by ID
  * @route   GET /api/v1/bookings/:id
  * @access  Private
@@ -1077,6 +1182,7 @@ const getBookingStatistics = async (req, res) => {
 
 module.exports = {
   getBookings,
+  searchBookings,
   getBooking,
   createBooking,
   updateBooking,
