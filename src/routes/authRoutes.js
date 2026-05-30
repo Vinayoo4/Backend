@@ -111,36 +111,6 @@ const loginPasswordValidation = [
   handleValidationErrors
 ];
 
-// FUTURE FEATURE - Not yet implemented
-// const updateProfileValidation = [
-//   body('name')
-//     .optional()
-//     .trim()
-//     .isLength({ min: 2, max: 100 })
-//     .withMessage('Name must be between 2 and 100 characters'),
-//   
-//   body('phone')
-//     .optional()
-//     .matches(/^\+?[\d\s\-()]+$/)
-//     .withMessage('Please provide a valid phone number'),
-//   
-//   body('avatar')
-//     .optional()
-//     .isURL().withMessage('Avatar must be a valid URL'),
-//   
-//   body('preferences.language')
-//     .optional()
-//     .isIn(['en', 'hi'])
-//     .withMessage('Invalid language preference'),
-//   
-//   body('preferences.theme')
-//     .optional()
-//     .isIn(['light', 'dark', 'auto'])
-//     .withMessage('Invalid theme preference'),
-//   
-//   handleValidationErrors
-// ];
-
 const changePasswordValidation = [
   body('currentPassword')
     .notEmpty().withMessage('Current password is required'),
@@ -251,14 +221,6 @@ router.post('/refresh', refreshTokenValidation, refreshToken);
  * @access  Private
  */
 router.get('/me', protect, getMe);
-
-/**
- * @route   PUT /api/v1/auth/me
- * @desc    Update current user profile
- * @access  Private
- * @note    Feature not yet implemented - placeholder for future
- */
-// router.put('/me', protect, updateProfileValidation, updateMe);
 
 /**
  * @route   PUT /api/v1/auth/change-password

@@ -8,9 +8,10 @@ const Booking = require('../models/Booking');
 const Room = require('../models/Room');
 const Guest = require('../models/Guest');
 const { validationResult } = require('express-validator');
-const ExcelJS = require('exceljs');
+const excelService = require('../services/excelService');
 const logger = require('../config/logger');
 const mongoose = require('mongoose');
+const { transformBooking } = require('../utils/bookingTransforms');
 // sanitize import removed (bookings uses fixed sort)
 
 /**
@@ -71,29 +72,7 @@ const getBookings = async (req, res) => {
     const total = await Booking.countDocuments(query);
 
     // Transform data for frontend
-    let transformedBookings = bookings.map(booking => ({
-      id: booking._id,
-      bookingNumber: `BK${booking._id.toString().slice(-6).toUpperCase()}`,
-      guestName: booking.guest?.name || 'Unknown Guest',
-      guestEmail: booking.guest?.email || '',
-      guestPhone: booking.guest?.phone || '',
-      roomNumber: booking.room?.number || 'N/A',
-      roomType: booking.room?.type || 'N/A',
-      roomImage: booking.room?.images?.[0] || null,
-      checkIn: booking.checkInDate,
-      checkOut: booking.checkOutDate,
-      status: booking.status,
-      totalAmount: booking.totalAmount,
-      paidAmount: booking.paidAmount || 0,
-      pendingAmount: booking.totalAmount - (booking.paidAmount || 0),
-      adults: booking.adults,
-      children: booking.children,
-      source: booking.source || 'direct',
-      specialRequests: booking.specialRequests,
-      createdBy: booking.createdBy?.name || 'System',
-      createdAt: booking.createdAt,
-      updatedAt: booking.updatedAt
-    }));
+    let transformedBookings = bookings.map(transformBooking);
 
     // Apply search filter after transformation (for guest name/email search)
     if (search) {
@@ -132,6 +111,111 @@ const getBookings = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch bookings',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Search bookings by confirmation number, guest name, etc.
+ * @route   GET /api/v1/bookings/search
+ * @access  Private (manage_bookings, view_bookings)
+ */
+const searchBookings = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      q,
+      status
+    } = req.query;
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Build base query
+    const query = {};
+
+    // Status filter
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    if (q) {
+      const Guest = require('../models/Guest');
+      const Room = require('../models/Room');
+
+      const guestQuery = {
+        $or: [
+          { name: { $regex: q, $options: 'i' } },
+          { email: { $regex: q, $options: 'i' } },
+          { phone: { $regex: q, $options: 'i' } }
+        ]
+      };
+      const guests = await Guest.find(guestQuery).select('_id').lean();
+      const guestIds = guests.map(g => g._id);
+
+      const roomQuery = { number: { $regex: q, $options: 'i' } };
+      const rooms = await Room.find(roomQuery).select('_id').lean();
+      const roomIds = rooms.map(r => r._id);
+
+      query.$or = [
+        { confirmationNumber: { $regex: q, $options: 'i' } },
+        { guest: { $in: guestIds } },
+        { room: { $in: roomIds } }
+      ];
+    }
+
+    const total = await Booking.countDocuments(query);
+
+    // Fetch matching bookings with pagination at the database level
+    const bookings = await Booking.find(query)
+      .populate('guest', 'name email phone')
+      .populate('room', 'number type images')
+      .populate('createdBy', 'name email')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    // Transform data for frontend
+    let transformedBookings = bookings.map(booking => ({
+      id: booking._id,
+      bookingNumber: booking.confirmationNumber || `BK${booking._id.toString().slice(-6).toUpperCase()}`,
+      guestName: booking.guest?.name || 'Unknown Guest',
+      guestEmail: booking.guest?.email || '',
+      guestPhone: booking.guest?.phone || '',
+      roomNumber: booking.room?.number || 'N/A',
+      roomType: booking.room?.type || 'N/A',
+      roomImage: booking.room?.images?.[0] || null,
+      checkIn: booking.checkInDate,
+      checkOut: booking.checkOutDate,
+      status: booking.status,
+      totalAmount: booking.totalAmount,
+      paidAmount: booking.paidAmount || 0,
+      pendingAmount: booking.totalAmount - (booking.paidAmount || 0),
+      adults: booking.adults,
+      children: booking.children,
+      source: booking.source || 'direct',
+      createdAt: booking.createdAt
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        bookings: transformedBookings,
+        pagination: {
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          pages: Math.ceil(total / parseInt(limit))
+        }
+      }
+    });
+  } catch (error) {
+    logger.error('Search bookings error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to search bookings',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -561,10 +645,100 @@ const deleteBooking = async (req, res) => {
 };
 
 /**
- * @desc    Bulk import bookings from Excel/CSV
- * @route   POST /api/v1/bookings/import
- * @access  Private (admin/manager)
+ * Process array of imported booking data
+ * @param {Array} toCreate
+ * @param {string} userId
+ * @returns {Promise<{ createdCount: number, createdBookings: Array, skipped: Array }>}
  */
+const processImportedBookings = async (toCreate, userId) => {
+  let createdCount = 0;
+  const createdBookings = [];
+  const skipped = [];
+
+  const guestEmails = [...new Set(toCreate.map(item => item.guestEmail))];
+  const roomNumbers = [...new Set(toCreate.map(item => item.roomNumber))];
+
+  const guests = await Guest.find({ email: { $in: guestEmails } }).lean();
+  const guestMap = guests.reduce((map, guest) => { map[guest.email] = guest._id; return map; }, {});
+
+  const rooms = await Room.find({ number: { $in: roomNumbers }, isActive: true }).lean();
+  const roomMap = rooms.reduce((map, room) => { map[room.number] = room; return map; }, {});
+
+  const roomIds = Object.values(roomMap).map(room => room._id);
+  const existingBookings = await Booking.find({
+      room: { $in: roomIds },
+      status: { $in: ['confirmed', 'checked-in'] }
+  }).lean();
+
+  const bulkOps = [];
+
+  for (const item of toCreate) {
+    try {
+      const guestId = guestMap[item.guestEmail];
+      if (!guestId) {
+        skipped.push({ email: item.guestEmail, reason: `Guest not found for email: ${item.guestEmail}` });
+        continue;
+      }
+
+      const room = roomMap[item.roomNumber];
+      if (!room) {
+        skipped.push({ email: item.guestEmail, reason: `Room not found or inactive: ${item.roomNumber}` });
+        continue;
+      }
+
+      const checkIn = new Date(item.checkInDate);
+      const checkOut = new Date(item.checkOutDate);
+
+      const isConflict = existingBookings.some(b => {
+         if (b.room.toString() !== room._id.toString()) return false;
+         const bIn = new Date(b.checkInDate);
+         const bOut = new Date(b.checkOutDate);
+         return (checkIn < bOut && checkOut > bIn);
+      });
+
+      if (isConflict) {
+        skipped.push({ email: item.guestEmail, reason: `Room ${item.roomNumber} not available for selected dates` });
+        continue;
+      }
+
+      existingBookings.push({
+         room: room._id,
+         checkInDate: checkIn,
+         checkOutDate: checkOut,
+         status: 'confirmed'
+      });
+
+      const nights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
+      const totalAmount = nights * (room.rate?.baseRate || 0);
+
+      bulkOps.push({
+        guest: guestId,
+        room: room._id,
+        checkInDate: checkIn,
+        checkOutDate: checkOut,
+        adults: item.adults,
+        children: item.children,
+        status: 'confirmed',
+        source: 'import',
+        totalAmount,
+        paidAmount: 0,
+        createdBy: userId
+      });
+
+    } catch (err) {
+      skipped.push({ email: item.guestEmail, reason: `Error creating booking: ${err.message}` });
+    }
+  }
+
+  if (bulkOps.length > 0) {
+    const docs = await Booking.insertMany(bulkOps);
+    createdCount = docs.length;
+    createdBookings.push(...docs);
+  }
+
+  return { createdCount, createdBookings, skipped };
+};
+
 const importBookings = async (req, res) => {
   try {
     if (!req.file || !req.file.buffer) {
@@ -574,195 +748,29 @@ const importBookings = async (req, res) => {
       });
     }
 
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(req.file.buffer);
-
-    const worksheet = workbook.worksheets[0];
-    if (!worksheet) {
-      return res.status(400).json({
-        success: false,
-        message: 'Uploaded file is empty or invalid'
-      });
-    }
-
-    // Parse headers
-    const headerRow = worksheet.getRow(1);
-    const headers = headerRow.values.slice(1).map(h =>
-      typeof h === 'string' ? h.trim().toLowerCase().replace(/\s+/g, '') : ''
-    );
-
-    const requiredHeaders = ['guestemail', 'roomnumber', 'checkindate', 'checkoutdate', 'adults'];
-    const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
-
-    if (missingHeaders.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid template. Missing columns: ${missingHeaders.join(', ')}`,
-        requiredHeaders: ['guestEmail', 'roomNumber', 'checkInDate', 'checkOutDate', 'adults', 'children (optional)']
-      });
-    }
-
-    const guestEmailIndex = headers.indexOf('guestemail') + 1;
-    const roomNumberIndex = headers.indexOf('roomnumber') + 1;
-    const checkInIndex = headers.indexOf('checkindate') + 1;
-    const checkOutIndex = headers.indexOf('checkoutdate') + 1;
-    const adultsIndex = headers.indexOf('adults') + 1;
-    const childrenIndex = headers.indexOf('children') + 1 || null;
-
-    const toCreate = [];
-    const skipped = [];
-
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return; // Skip header
-
-      const guestEmail = row.getCell(guestEmailIndex).value?.toString().trim();
-      const roomNumber = row.getCell(roomNumberIndex).value?.toString().trim();
-      const checkInRaw = row.getCell(checkInIndex).value;
-      const checkOutRaw = row.getCell(checkOutIndex).value;
-      const adultsRaw = row.getCell(adultsIndex).value;
-      const childrenRaw = childrenIndex ? row.getCell(childrenIndex).value : 0;
-
-      // Validate required fields
-      if (!guestEmail || !roomNumber || !checkInRaw || !checkOutRaw || !adultsRaw) {
-        skipped.push({ row: rowNumber, reason: 'Missing required fields' });
-        return;
-      }
-
-      // Parse dates
-      const checkInDate = new Date(checkInRaw);
-      const checkOutDate = new Date(checkOutRaw);
-      const adults = Number(adultsRaw);
-      const children = Number(childrenRaw) || 0;
-
-      // Validate dates
-      if (isNaN(checkInDate.getTime())) {
-        skipped.push({ row: rowNumber, reason: 'Invalid check-in date' });
-        return;
-      }
-      if (isNaN(checkOutDate.getTime())) {
-        skipped.push({ row: rowNumber, reason: 'Invalid check-out date' });
-        return;
-      }
-      if (checkOutDate <= checkInDate) {
-        skipped.push({ row: rowNumber, reason: 'Check-out must be after check-in' });
-        return;
-      }
-
-      toCreate.push({
-        guestEmail,
-        roomNumber,
-        checkInDate,
-        checkOutDate,
-        adults,
-        children
-      });
-    });
+    const { toCreate, skipped: parseSkipped } = await excelService.parseBookingsImport(req.file.buffer);
 
     if (toCreate.length === 0) {
       return res.status(400).json({
         success: false,
         message: 'No valid booking records found in the file',
-        data: { imported: 0, skipped }
+        data: { imported: 0, skipped: parseSkipped }
       });
     }
 
-    let createdCount = 0;
-    const createdBookings = [];
+    const { createdCount, skipped: dbSkipped } = await processImportedBookings(toCreate, req.user?.id);
+    const totalSkipped = [...parseSkipped, ...dbSkipped];
 
-    // Process each booking optimized (No N+1 queries)
-    const guestEmails = [...new Set(toCreate.map(item => item.guestEmail))];
-    const roomNumbers = [...new Set(toCreate.map(item => item.roomNumber))];
-
-    const guests = await Guest.find({ email: { $in: guestEmails } }).lean();
-    const guestMap = guests.reduce((map, guest) => { map[guest.email] = guest._id; return map; }, {});
-
-    const rooms = await Room.find({ number: { $in: roomNumbers }, isActive: true }).lean();
-    const roomMap = rooms.reduce((map, room) => { map[room.number] = room; return map; }, {});
-
-    const roomIds = Object.values(roomMap).map(room => room._id);
-    const existingBookings = await Booking.find({
-        room: { $in: roomIds },
-        status: { $in: ['confirmed', 'checked-in'] }
-    }).lean();
-
-    const bulkOps = [];
-
-    for (const item of toCreate) {
-      try {
-        const guestId = guestMap[item.guestEmail];
-        if (!guestId) {
-          skipped.push({ email: item.guestEmail, reason: `Guest not found for email: ${item.guestEmail}` });
-          continue;
-        }
-
-        const room = roomMap[item.roomNumber];
-        if (!room) {
-          skipped.push({ email: item.guestEmail, reason: `Room not found or inactive: ${item.roomNumber}` });
-          continue;
-        }
-
-        const checkIn = new Date(item.checkInDate);
-        const checkOut = new Date(item.checkOutDate);
-
-        const isConflict = existingBookings.some(b => {
-           if (b.room.toString() !== room._id.toString()) return false;
-           const bIn = new Date(b.checkInDate);
-           const bOut = new Date(b.checkOutDate);
-           return (checkIn < bOut && checkOut > bIn);
-        });
-
-        if (isConflict) {
-          skipped.push({ email: item.guestEmail, reason: `Room ${item.roomNumber} not available for selected dates` });
-          continue;
-        }
-
-        // Add to our running list of existingBookings so we don't double book within the same import file!
-        existingBookings.push({
-           room: room._id,
-           checkInDate: checkIn,
-           checkOutDate: checkOut,
-           status: 'confirmed'
-        });
-
-        const nights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
-        const totalAmount = nights * (room.rate?.baseRate || 0);
-
-        bulkOps.push({
-          guest: guestId,
-          room: room._id,
-          checkInDate: checkIn,
-          checkOutDate: checkOut,
-          adults: item.adults,
-          children: item.children,
-          status: 'confirmed',
-          source: 'import',
-          totalAmount,
-          paidAmount: 0,
-          createdBy: req.user?.id
-        });
-
-      } catch (err) {
-        logger.error('Import booking item error:', err);
-        skipped.push({ email: item.guestEmail, reason: `Error creating booking: ${err.message}` });
-      }
-    }
-
-    if (bulkOps.length > 0) {
-      const docs = await Booking.insertMany(bulkOps);
-      createdCount = docs.length;
-      createdBookings.push(...docs);
-    }
-
-    logger.info(`Bulk import completed: ${createdCount} bookings created, ${skipped.length} skipped`);
+    logger.info(`Bulk import completed: ${createdCount} bookings created, ${totalSkipped.length} skipped`);
 
     res.status(201).json({
       success: true,
       message: `Import completed. ${createdCount} bookings created.`,
       data: {
         imported: createdCount,
-        skipped: skipped.length,
-        skippedDetails: skipped,
-        totalProcessed: toCreate.length
+        skipped: totalSkipped.length,
+        skippedDetails: totalSkipped,
+        totalProcessed: toCreate.length + parseSkipped.length
       }
     });
 
@@ -771,6 +779,14 @@ const importBookings = async (req, res) => {
       error: error.message,
       stack: error.stack
     });
+
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+        requiredHeaders: ['guestEmail', 'roomNumber', 'checkInDate', 'checkOutDate', 'adults', 'children (optional)']
+      });
+    }
 
     res.status(500).json({
       success: false,
@@ -1092,6 +1108,7 @@ const getBookingStatistics = async (req, res) => {
 
 module.exports = {
   getBookings,
+  searchBookings,
   getBooking,
   createBooking,
   updateBooking,

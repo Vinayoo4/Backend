@@ -209,21 +209,30 @@ const runDatabaseBackup = async () => {
     const dataDir   = path.resolve(__dirname, '../../data');
     const backupDir = path.join(dataDir, 'backups');
 
-    if (!fs.existsSync(dataDir)) {
+    try {
+      await fs.promises.access(dataDir);
+    } catch (err) {
       logger.info('[Automation] runDatabaseBackup: data/ dir not found, skipping.');
       return;
     }
 
-    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+    try {
+      await fs.promises.access(backupDir);
+    } catch (err) {
+      await fs.promises.mkdir(backupDir, { recursive: true });
+    }
 
     const ts      = new Date().toISOString().replace(/[:.]/g, '-');
     const destDir = path.join(backupDir, ts);
-    fs.mkdirSync(destDir, { recursive: true });
+    await fs.promises.mkdir(destDir, { recursive: true });
 
-    const jsonFiles = fs.readdirSync(dataDir).filter(f => f.endsWith('.json'));
-    jsonFiles.forEach(file => {
-      fs.copyFileSync(path.join(dataDir, file), path.join(destDir, file));
-    });
+    const dirFiles = await fs.promises.readdir(dataDir);
+    const jsonFiles = dirFiles.filter(f => f.endsWith('.json'));
+
+    // Copy all files concurrently
+    await Promise.all(jsonFiles.map(file => {
+      return fs.promises.copyFile(path.join(dataDir, file), path.join(destDir, file));
+    }));
 
     // Write manifest
     const manifest = {
@@ -231,7 +240,7 @@ const runDatabaseBackup = async () => {
       files: jsonFiles,
       count: jsonFiles.length,
     };
-    fs.writeFileSync(path.join(destDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+    await fs.promises.writeFile(path.join(destDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
     // Optionally email admin with a summary (not the actual zip to avoid large payloads)
     const adminEmail = process.env.ADMIN_EMAIL;

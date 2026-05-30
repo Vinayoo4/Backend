@@ -63,14 +63,12 @@ const sendOtp = async (email, _phone, otpCode) => {
     // Fallback: log OTP in development when email service not configured
     logger.info(`🔐 OTP for ${email}: ${otpCode}`);
     if (process.env.NODE_ENV === 'development') {
-      // eslint-disable-next-line no-console
-      console.log(`\n╔════════════════════════════════╗`);
-      // eslint-disable-next-line no-console
-      console.log(`║  OTP CODE: ${otpCode}           ║`);
-      // eslint-disable-next-line no-console
-      console.log(`║  Email: ${email.padEnd(20)} ║`);
-      // eslint-disable-next-line no-console
-      console.log(`╚════════════════════════════════╝\n`);
+      logger.info(`
+╔════════════════════════════════╗
+║  OTP CODE: ${otpCode}           ║
+║  Email: ${email.padEnd(20)} ║
+╚════════════════════════════════╝
+`);
     }
   }
 };
