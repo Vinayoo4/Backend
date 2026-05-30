@@ -12,19 +12,18 @@ const {
   createInvoice,
   updateInvoice,
   deleteInvoice,
-  generateInvoicePDF
-  // TODO: Implement these functions in invoiceController.js
-  // sendInvoiceEmail,
-  // getOverdueInvoices,
-  // getInvoiceStatistics,
-  // addPaymentToInvoice,
-  // voidInvoice,
-  // markAsPaid,
-  // getRevenueReport,
-  // exportInvoices,
-  // getInvoicesByGuest,
-  // getInvoicesByBooking,
-  // duplicateInvoice
+  generateInvoicePDF,
+    sendInvoiceEmail,
+  getOverdueInvoices,
+  getInvoiceStatistics,
+  addPaymentToInvoice,
+  voidInvoice,
+  markAsPaid,
+  getRevenueReport,
+  exportInvoices,
+  getInvoicesByGuest,
+  getInvoicesByBooking,
+  duplicateInvoice
 } = require('../controllers/invoiceController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const { handleValidationErrors } = require('../middlewares/errorMiddleware');
@@ -295,91 +294,90 @@ router.post(
   createInvoice
 );
 
-// TODO: Implement these functions in invoiceController.js
-// /**
-//  * @route   GET /api/v1/invoices/statistics
-//  * @desc    Get invoice statistics (revenue, pending, overdue)
-//  * @access  Private (manage_invoices, view_analytics)
-//  */
-// router.get(
-//   '/statistics',
-//   authorize('manage_invoices', 'view_analytics'),
-//   [
-//     query('startDate').optional().isISO8601(),
-//     query('endDate').optional().isISO8601(),
-//     handleValidationErrors
-//   ],
-//   getInvoiceStatistics
-// );
+/**
+ * @route   GET /api/v1/invoices/statistics
+ * @desc    Get invoice statistics (revenue, pending, overdue)
+ * @access  Private (manage_invoices, view_analytics)
+ */
+router.get(
+  '/statistics',
+  authorize('manage_invoices', 'view_analytics'),
+  [
+    query('startDate').optional().isISO8601(),
+    query('endDate').optional().isISO8601(),
+    handleValidationErrors
+  ],
+  getInvoiceStatistics
+);
 
-// /**
-//  * @route   GET /api/v1/invoices/overdue
-//  * @desc    Get all overdue invoices
-//  * @access  Private (manage_invoices, view_analytics)
-//  */
-// router.get(
-//   '/overdue',
-//   authorize('manage_invoices', 'view_analytics'),
-//   getOverdueInvoices
-// );
+/**
+ * @route   GET /api/v1/invoices/overdue
+ * @desc    Get all overdue invoices
+ * @access  Private (manage_invoices, view_analytics)
+ */
+router.get(
+  '/overdue',
+  authorize('manage_invoices', 'view_analytics'),
+  getOverdueInvoices
+);
 
-// /**
-//  * @route   GET /api/v1/invoices/revenue-report
-//  * @desc    Get revenue report for date range
-//  * @access  Private (manage_invoices, view_analytics)
-//  */
-// router.get(
-//   '/revenue-report',
-//   authorize('manage_invoices', 'view_analytics'),
-//   [
-//     query('startDate').isISO8601().withMessage('Valid start date is required'),
-//     query('endDate').isISO8601().withMessage('Valid end date is required'),
-//     query('groupBy').optional().isIn(['day', 'week', 'month']),
-//     handleValidationErrors
-//   ],
-//   getRevenueReport
-// );
+/**
+ * @route   GET /api/v1/invoices/revenue-report
+ * @desc    Get revenue report for date range
+ * @access  Private (manage_invoices, view_analytics)
+ */
+router.get(
+  '/revenue-report',
+  authorize('manage_invoices', 'view_analytics'),
+  [
+    query('startDate').isISO8601().withMessage('Valid start date is required'),
+    query('endDate').isISO8601().withMessage('Valid end date is required'),
+    query('groupBy').optional().isIn(['day', 'week', 'month']),
+    handleValidationErrors
+  ],
+  getRevenueReport
+);
 
-// /**
-//  * @route   GET /api/v1/invoices/export
-//  * @desc    Export invoices to Excel
-//  * @access  Private (manage_invoices, manage_staff, all)
-//  */
-// router.get(
-//   '/export',
-//   authorize('manage_invoices', 'manage_staff', 'all'),
-//   exportInvoices
-// );
+/**
+ * @route   GET /api/v1/invoices/export
+ * @desc    Export invoices to Excel
+ * @access  Private (manage_invoices, manage_staff, all)
+ */
+router.get(
+  '/export',
+  authorize('manage_invoices', 'manage_staff', 'all'),
+  exportInvoices
+);
 
-// /**
-//  * @route   GET /api/v1/invoices/guest/:guestId
-//  * @desc    Get all invoices for a specific guest
-//  * @access  Private (manage_invoices, view_bookings)
-//  */
-// router.get(
-//   '/guest/:guestId',
-//   authorize('manage_invoices', 'view_bookings'),
-//   [
-//     param('guestId').isMongoId().withMessage('Invalid guest ID'),
-//     handleValidationErrors
-//   ],
-//   getInvoicesByGuest
-// );
+/**
+ * @route   GET /api/v1/invoices/guest/:guestId
+ * @desc    Get all invoices for a specific guest
+ * @access  Private (manage_invoices, view_bookings)
+ */
+router.get(
+  '/guest/:guestId',
+  authorize('manage_invoices', 'view_bookings'),
+  [
+    param('guestId').isMongoId().withMessage('Invalid guest ID'),
+    handleValidationErrors
+  ],
+  getInvoicesByGuest
+);
 
-// /**
-//  * @route   GET /api/v1/invoices/booking/:bookingId
-//  * @desc    Get invoice for a specific booking
-//  * @access  Private (manage_invoices, view_bookings)
-//  */
-// router.get(
-//   '/booking/:bookingId',
-//   authorize('manage_invoices', 'view_bookings'),
-//   [
-//     param('bookingId').isMongoId().withMessage('Invalid booking ID'),
-//     handleValidationErrors
-//   ],
-//   getInvoicesByBooking
-// );
+/**
+ * @route   GET /api/v1/invoices/booking/:bookingId
+ * @desc    Get invoice for a specific booking
+ * @access  Private (manage_invoices, view_bookings)
+ */
+router.get(
+  '/booking/:bookingId',
+  authorize('manage_invoices', 'view_bookings'),
+  [
+    param('bookingId').isMongoId().withMessage('Invalid booking ID'),
+    handleValidationErrors
+  ],
+  getInvoicesByBooking
+);
 
 /**
  * @route   GET /api/v1/invoices/:id
@@ -419,77 +417,75 @@ router.delete(
 );
 
 // ========== Invoice Operations Routes ==========
-// TODO: Implement these functions in invoiceController.js
 
-// /**
-//  * @route   POST /api/v1/invoices/:id/duplicate
-//  * @desc    Duplicate an existing invoice
-//  * @access  Private (manage_invoices)
-//  */
-// router.post(
-//   '/:id/duplicate',
-//   authorize('manage_invoices'),
-//   ...mongoIdValidation,
-//   duplicateInvoice
-// );
+/**
+ * @route   POST /api/v1/invoices/:id/duplicate
+ * @desc    Duplicate an existing invoice
+ * @access  Private (manage_invoices)
+ */
+router.post(
+  '/:id/duplicate',
+  authorize('manage_invoices'),
+  ...mongoIdValidation,
+  duplicateInvoice
+);
 
-// /**
-//  * @route   PUT /api/v1/invoices/:id/void
-//  * @desc    Void an invoice (cannot be undone)
-//  * @access  Private (manage_invoices, admin, manager)
-//  */
-// router.put(
-//   '/:id/void',
-//   authorize('manage_invoices'),
-//   [
-//     param('id').isMongoId().withMessage('Invalid invoice ID'),
-//     body('reason')
-//       .trim()
-//       .notEmpty().withMessage('Void reason is required')
-//       .isLength({ min: 10, max: 500 })
-//       .withMessage('Void reason must be between 10 and 500 characters'),
-//     handleValidationErrors
-//   ],
-//   voidInvoice
-// );
+/**
+ * @route   PUT /api/v1/invoices/:id/void
+ * @desc    Void an invoice (cannot be undone)
+ * @access  Private (manage_invoices, admin, manager)
+ */
+router.put(
+  '/:id/void',
+  authorize('manage_invoices'),
+  [
+    param('id').isMongoId().withMessage('Invalid invoice ID'),
+    body('reason')
+      .trim()
+      .notEmpty().withMessage('Void reason is required')
+      .isLength({ min: 10, max: 500 })
+      .withMessage('Void reason must be between 10 and 500 characters'),
+    handleValidationErrors
+  ],
+  voidInvoice
+);
 
-// /**
-//  * @route   PUT /api/v1/invoices/:id/mark-paid
-//  * @desc    Mark invoice as fully paid
-//  * @access  Private (manage_invoices)
-//  */
-// router.put(
-//   '/:id/mark-paid',
-//   authorize('manage_invoices'),
-//   [
-//     param('id').isMongoId().withMessage('Invalid invoice ID'),
-//     body('paymentMethod')
-//       .optional()
-//       .isIn(['cash', 'card', 'upi', 'bank_transfer', 'online', 'cheque', 'wallet', 'corporate'])
-//       .withMessage('Invalid payment method'),
-//     body('paymentReference')
-//       .optional()
-//       .trim()
-//       .isLength({ max: 100 }),
-//     handleValidationErrors
-//   ],
-//   markAsPaid
-// );
+/**
+ * @route   PUT /api/v1/invoices/:id/mark-paid
+ * @desc    Mark invoice as fully paid
+ * @access  Private (manage_invoices)
+ */
+router.put(
+  '/:id/mark-paid',
+  authorize('manage_invoices'),
+  [
+    param('id').isMongoId().withMessage('Invalid invoice ID'),
+    body('paymentMethod')
+      .optional()
+      .isIn(['cash', 'card', 'upi', 'bank_transfer', 'online', 'cheque', 'wallet', 'corporate'])
+      .withMessage('Invalid payment method'),
+    body('paymentReference')
+      .optional()
+      .trim()
+      .isLength({ max: 100 }),
+    handleValidationErrors
+  ],
+  markAsPaid
+);
 
 // ========== Payment Routes ==========
-// TODO: Implement this function in invoiceController.js
 
-// /**
-//  * @route   POST /api/v1/invoices/:id/payments
-//  * @desc    Add payment to invoice
-//  * @access  Private (manage_invoices)
-//  */
-// router.post(
-//   '/:id/payments',
-//   authorize('manage_invoices'),
-//   paymentValidation,
-//   addPaymentToInvoice
-// );
+/**
+ * @route   POST /api/v1/invoices/:id/payments
+ * @desc    Add payment to invoice
+ * @access  Private (manage_invoices)
+ */
+router.post(
+  '/:id/payments',
+  authorize('manage_invoices'),
+  _paymentValidation,
+  addPaymentToInvoice
+);
 
 // ========== PDF & Email Routes ==========
 
@@ -505,17 +501,16 @@ router.get(
   generateInvoicePDF
 );
 
-// TODO: Implement this function in invoiceController.js
-// /**
-//  * @route   POST /api/v1/invoices/:id/send-email
-//  * @desc    Send invoice via email
-//  * @access  Private (manage_invoices)
-//  */
-// router.post(
-//   '/:id/send-email',
-//   authorize('manage_invoices'),
-//   emailInvoiceValidation,
-//   sendInvoiceEmail
-// );
+/**
+ * @route   POST /api/v1/invoices/:id/send-email
+ * @desc    Send invoice via email
+ * @access  Private (manage_invoices)
+ */
+router.post(
+  '/:id/send-email',
+  authorize('manage_invoices'),
+  _emailInvoiceValidation,
+  sendInvoiceEmail
+);
 
 module.exports = router;
