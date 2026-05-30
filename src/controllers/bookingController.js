@@ -669,11 +669,49 @@ const importBookings = async (req, res) => {
     let createdCount = 0;
     const createdBookings = [];
 
+    // Pre-fetch all guests and rooms needed
+    const guestEmails = [...new Set(toCreate.map(item => item.guestEmail))];
+    const roomNumbers = [...new Set(toCreate.map(item => item.roomNumber))];
+
+    const guests = await Guest.find({ email: { $in: guestEmails } });
+    const rooms = await Room.find({ number: { $in: roomNumbers }, isActive: true });
+
+    const guestMap = new Map(guests.map(g => [g.email, g]));
+    const roomMap = new Map(rooms.map(r => [r.number, r]));
+
+    // Determine min/max dates for overlapping bookings check
+    let minDate = new Date(toCreate[0].checkInDate);
+    let maxDate = new Date(toCreate[0].checkOutDate);
+
+    for (const item of toCreate) {
+      if (item.checkInDate < minDate) minDate = item.checkInDate;
+      if (item.checkOutDate > maxDate) maxDate = item.checkOutDate;
+    }
+
+    // Fetch existing overlapping bookings for the relevant rooms
+    const roomIds = Array.from(roomMap.values()).map(r => r._id);
+    const existingBookings = await Booking.find({
+      room: { $in: roomIds },
+      status: { $in: ['confirmed', 'checked-in'] },
+      checkInDate: { $lt: maxDate },
+      checkOutDate: { $gt: minDate }
+    });
+
+    // Group bookings by room ID for fast lookup
+    const bookingsByRoom = new Map();
+    for (const b of existingBookings) {
+      const rid = b.room.toString();
+      if (!bookingsByRoom.has(rid)) {
+        bookingsByRoom.set(rid, []);
+      }
+      bookingsByRoom.get(rid).push(b);
+    }
+
     // Process each booking
     for (const item of toCreate) {
       try {
         // Find guest by email
-        const guest = await Guest.findOne({ email: item.guestEmail });
+        const guest = guestMap.get(item.guestEmail);
         if (!guest) {
           skipped.push({
             email: item.guestEmail,
@@ -683,7 +721,7 @@ const importBookings = async (req, res) => {
         }
 
         // Find room by number
-        const room = await Room.findOne({ number: item.roomNumber, isActive: true });
+        const room = roomMap.get(item.roomNumber);
         if (!room) {
           skipped.push({
             email: item.guestEmail,
@@ -692,12 +730,20 @@ const importBookings = async (req, res) => {
           continue;
         }
 
-        // Check availability
-        const isAvailable = await checkRoomAvailability(
-          room._id,
-          item.checkInDate,
-          item.checkOutDate
-        );
+        const roomIdStr = room._id.toString();
+
+        // Check availability locally against existing and newly imported bookings
+        const roomBookings = bookingsByRoom.get(roomIdStr) || [];
+        let isAvailable = true;
+
+        for (const b of roomBookings) {
+          // If checkInDate is before the item's checkOut AND checkOutDate is after the item's checkIn
+          // then there is an overlap.
+          if (new Date(b.checkInDate) < item.checkOutDate && new Date(b.checkOutDate) > item.checkInDate) {
+            isAvailable = false;
+            break;
+          }
+        }
 
         if (!isAvailable) {
           skipped.push({
@@ -710,6 +756,17 @@ const importBookings = async (req, res) => {
         // Calculate total amount
         const nights = Math.ceil((item.checkOutDate - item.checkInDate) / (1000 * 60 * 60 * 24));
         const totalAmount = nights * (room.rate?.baseRate || 0);
+
+        // Add this item to the in-memory bookings map to prevent double-booking in the same batch
+        if (!bookingsByRoom.has(roomIdStr)) {
+          bookingsByRoom.set(roomIdStr, []);
+        }
+        bookingsByRoom.get(roomIdStr).push({
+          room: room._id,
+          checkInDate: item.checkInDate,
+          checkOutDate: item.checkOutDate,
+          status: 'confirmed'
+        });
 
         // Create booking
         const booking = await Booking.create({
