@@ -669,54 +669,69 @@ const importBookings = async (req, res) => {
     let createdCount = 0;
     const createdBookings = [];
 
-    // Process each booking
+    // Process each booking optimized (No N+1 queries)
+    const guestEmails = [...new Set(toCreate.map(item => item.guestEmail))];
+    const roomNumbers = [...new Set(toCreate.map(item => item.roomNumber))];
+
+    const guests = await Guest.find({ email: { $in: guestEmails } }).lean();
+    const guestMap = guests.reduce((map, guest) => { map[guest.email] = guest._id; return map; }, {});
+
+    const rooms = await Room.find({ number: { $in: roomNumbers }, isActive: true }).lean();
+    const roomMap = rooms.reduce((map, room) => { map[room.number] = room; return map; }, {});
+
+    const roomIds = Object.values(roomMap).map(room => room._id);
+    const existingBookings = await Booking.find({
+        room: { $in: roomIds },
+        status: { $in: ['confirmed', 'checked-in'] }
+    }).lean();
+
+    const bulkOps = [];
+
     for (const item of toCreate) {
       try {
-        // Find guest by email
-        const guest = await Guest.findOne({ email: item.guestEmail });
-        if (!guest) {
-          skipped.push({
-            email: item.guestEmail,
-            reason: `Guest not found for email: ${item.guestEmail}`
-          });
+        const guestId = guestMap[item.guestEmail];
+        if (!guestId) {
+          skipped.push({ email: item.guestEmail, reason: `Guest not found for email: ${item.guestEmail}` });
           continue;
         }
 
-        // Find room by number
-        const room = await Room.findOne({ number: item.roomNumber, isActive: true });
+        const room = roomMap[item.roomNumber];
         if (!room) {
-          skipped.push({
-            email: item.guestEmail,
-            reason: `Room not found or inactive: ${item.roomNumber}`
-          });
+          skipped.push({ email: item.guestEmail, reason: `Room not found or inactive: ${item.roomNumber}` });
           continue;
         }
 
-        // Check availability
-        const isAvailable = await checkRoomAvailability(
-          room._id,
-          item.checkInDate,
-          item.checkOutDate
-        );
+        const checkIn = new Date(item.checkInDate);
+        const checkOut = new Date(item.checkOutDate);
 
-        if (!isAvailable) {
-          skipped.push({
-            email: item.guestEmail,
-            reason: `Room ${item.roomNumber} not available for selected dates`
-          });
+        const isConflict = existingBookings.some(b => {
+           if (b.room.toString() !== room._id.toString()) return false;
+           const bIn = new Date(b.checkInDate);
+           const bOut = new Date(b.checkOutDate);
+           return (checkIn < bOut && checkOut > bIn);
+        });
+
+        if (isConflict) {
+          skipped.push({ email: item.guestEmail, reason: `Room ${item.roomNumber} not available for selected dates` });
           continue;
         }
 
-        // Calculate total amount
-        const nights = Math.ceil((item.checkOutDate - item.checkInDate) / (1000 * 60 * 60 * 24));
+        // Add to our running list of existingBookings so we don't double book within the same import file!
+        existingBookings.push({
+           room: room._id,
+           checkInDate: checkIn,
+           checkOutDate: checkOut,
+           status: 'confirmed'
+        });
+
+        const nights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
         const totalAmount = nights * (room.rate?.baseRate || 0);
 
-        // Create booking
-        const booking = await Booking.create({
-          guest: guest._id,
+        bulkOps.push({
+          guest: guestId,
           room: room._id,
-          checkInDate: item.checkInDate,
-          checkOutDate: item.checkOutDate,
+          checkInDate: checkIn,
+          checkOutDate: checkOut,
           adults: item.adults,
           children: item.children,
           status: 'confirmed',
@@ -726,16 +741,16 @@ const importBookings = async (req, res) => {
           createdBy: req.user?.id
         });
 
-        createdBookings.push(booking);
-        createdCount++;
-
       } catch (err) {
         logger.error('Import booking item error:', err);
-        skipped.push({
-          email: item.guestEmail,
-          reason: `Error creating booking: ${err.message}`
-        });
+        skipped.push({ email: item.guestEmail, reason: `Error creating booking: ${err.message}` });
       }
+    }
+
+    if (bulkOps.length > 0) {
+      const docs = await Booking.insertMany(bulkOps);
+      createdCount = docs.length;
+      createdBookings.push(...docs);
     }
 
     logger.info(`Bulk import completed: ${createdCount} bookings created, ${skipped.length} skipped`);
