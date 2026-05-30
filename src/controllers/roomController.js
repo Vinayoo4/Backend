@@ -548,6 +548,53 @@ const updateRoomStatus = async (req, res) => {
 };
 
 /**
+ * @desc    Bulk update room status
+ * @route   PUT /api/v1/rooms/bulk-update-status
+ * @access  Private (manage_rooms, admin, manager)
+ */
+const bulkUpdateRoomStatus = async (req, res) => {
+  try {
+    const { roomIds, status } = req.body;
+
+    const result = await Room.updateMany(
+      { _id: { $in: roomIds } },
+      { $set: { status, updatedAt: new Date() } }
+    );
+
+    // Emit real-time updates for each room
+    const io = req.app.get('io');
+    if (io) {
+      const hotelRoom = `hotel_${req.user.hotelId || 'hotel_001'}`;
+      roomIds.forEach(roomId => {
+        io.to(hotelRoom).emit('room_status_change', {
+          roomId: roomId,
+          status: status,
+          updatedBy: req.user.id
+        });
+      });
+    }
+
+    logger.info(`Bulk room status update: ${roomIds.length} rooms to ${status} by user: ${req.user.id}`);
+
+    res.json({
+      success: true,
+      message: `${result.modifiedCount} rooms updated successfully`,
+      data: {
+        matchedCount: result.matchedCount,
+        modifiedCount: result.modifiedCount
+      }
+    });
+  } catch (error) {
+    logger.error('Error in bulkUpdateRoomStatus:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update rooms',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
  * @desc    Get room statistics
  * @route   GET /api/v1/rooms/statistics
  * @access  Private
@@ -603,5 +650,6 @@ module.exports = {
   deleteRoom,
   checkAvailability,
   updateRoomStatus,
-  getRoomStatistics
+  getRoomStatistics,
+  bulkUpdateRoomStatus
 };
