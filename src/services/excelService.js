@@ -302,9 +302,103 @@ const exportReport = async (reportData) => {
   return workbook.xlsx.writeBuffer();
 };
 
+// ─── parseBookingsImport ──────────────────────────────────────────────────────
+
+/**
+ * Parse uploaded Excel buffer for bookings import
+ * @param {Buffer} buffer
+ * @returns {Promise<{ toCreate: Array, skipped: Array }>}
+ */
+const parseBookingsImport = async (buffer) => {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) {
+    const error = new Error('Uploaded file is empty or invalid');
+    error.name = 'ValidationError';
+    throw error;
+  }
+
+  // Parse headers
+  const headerRow = worksheet.getRow(1);
+  const headers = headerRow.values.slice(1).map(h =>
+    typeof h === 'string' ? h.trim().toLowerCase().replace(/\s+/g, '') : ''
+  );
+
+  const requiredHeaders = ['guestemail', 'roomnumber', 'checkindate', 'checkoutdate', 'adults'];
+  const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+
+  if (missingHeaders.length > 0) {
+    const error = new Error(`Invalid template. Missing columns: ${missingHeaders.join(', ')}`);
+    error.name = 'ValidationError';
+    error.missingHeaders = missingHeaders;
+    throw error;
+  }
+
+  const guestEmailIndex = headers.indexOf('guestemail') + 1;
+  const roomNumberIndex = headers.indexOf('roomnumber') + 1;
+  const checkInIndex = headers.indexOf('checkindate') + 1;
+  const checkOutIndex = headers.indexOf('checkoutdate') + 1;
+  const adultsIndex = headers.indexOf('adults') + 1;
+  const childrenIndex = headers.indexOf('children') + 1 || null;
+
+  const toCreate = [];
+  const skipped = [];
+
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return; // Skip header
+
+    const guestEmail = row.getCell(guestEmailIndex).value?.toString().trim();
+    const roomNumber = row.getCell(roomNumberIndex).value?.toString().trim();
+    const checkInRaw = row.getCell(checkInIndex).value;
+    const checkOutRaw = row.getCell(checkOutIndex).value;
+    const adultsRaw = row.getCell(adultsIndex).value;
+    const childrenRaw = childrenIndex ? row.getCell(childrenIndex).value : 0;
+
+    // Validate required fields
+    if (!guestEmail || !roomNumber || !checkInRaw || !checkOutRaw || !adultsRaw) {
+      skipped.push({ row: rowNumber, reason: 'Missing required fields' });
+      return;
+    }
+
+    // Parse dates
+    const checkInDate = new Date(checkInRaw);
+    const checkOutDate = new Date(checkOutRaw);
+    const adults = Number(adultsRaw);
+    const children = Number(childrenRaw) || 0;
+
+    // Validate dates
+    if (isNaN(checkInDate.getTime())) {
+      skipped.push({ row: rowNumber, reason: 'Invalid check-in date' });
+      return;
+    }
+    if (isNaN(checkOutDate.getTime())) {
+      skipped.push({ row: rowNumber, reason: 'Invalid check-out date' });
+      return;
+    }
+    if (checkOutDate <= checkInDate) {
+      skipped.push({ row: rowNumber, reason: 'Check-out must be after check-in' });
+      return;
+    }
+
+    toCreate.push({
+      guestEmail,
+      roomNumber,
+      checkInDate,
+      checkOutDate,
+      adults,
+      children
+    });
+  });
+
+  return { toCreate, skipped };
+};
+
 module.exports = {
   toBuffer,
   exportBookings,
   exportGuests,
   exportReport,
+  parseBookingsImport,
 };

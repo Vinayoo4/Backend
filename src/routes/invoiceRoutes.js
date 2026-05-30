@@ -13,7 +13,7 @@ const {
   updateInvoice,
   deleteInvoice,
   generateInvoicePDF,
-  sendInvoiceEmail
+  sendInvoiceEmail,
   // TODO: Implement these functions in invoiceController.js
   // getOverdueInvoices,
   // getInvoiceStatistics,
@@ -24,7 +24,7 @@ const {
   // exportInvoices,
   // getInvoicesByGuest,
   // getInvoicesByBooking,
-  // duplicateInvoice
+  duplicateInvoice
 } = require('../controllers/invoiceController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const { handleValidationErrors } = require('../middlewares/errorMiddleware');
@@ -421,17 +421,17 @@ router.delete(
 // ========== Invoice Operations Routes ==========
 // TODO: Implement these functions in invoiceController.js
 
-// /**
-//  * @route   POST /api/v1/invoices/:id/duplicate
-//  * @desc    Duplicate an existing invoice
-//  * @access  Private (manage_invoices)
-//  */
-// router.post(
-//   '/:id/duplicate',
-//   authorize('manage_invoices'),
-//   ...mongoIdValidation,
-//   duplicateInvoice
-// );
+/**
+ * @route   POST /api/v1/invoices/:id/duplicate
+ * @desc    Duplicate an existing invoice
+ * @access  Private (manage_invoices)
+ */
+router.post(
+  '/:id/duplicate',
+  authorize('manage_invoices'),
+  ...mongoIdValidation,
+  duplicateInvoice
+);
 
 // /**
 //  * @route   PUT /api/v1/invoices/:id/void

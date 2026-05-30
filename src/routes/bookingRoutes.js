@@ -8,6 +8,7 @@ const express = require('express');
 const { body, param, query } = require('express-validator');
 const {
   getBookings,
+  searchBookings,
   getBooking,
   createBooking,
   updateBooking,
@@ -367,18 +368,17 @@ router.post(
   createBooking
 );
 
-// TODO: Implement these functions in bookingController.js
-// /**
-//  * @route   GET /api/v1/bookings/search
-//  * @desc    Search bookings by confirmation number, guest name, etc.
-//  * @access  Private (manage_bookings, view_bookings)
-//  */
-// router.get(
-//   '/search',
-//   authorize('manage_bookings', 'view_bookings'),
-//   searchValidation,
-//   searchBookings
-// );
+/**
+ * @route   GET /api/v1/bookings/search
+ * @desc    Search bookings by confirmation number, guest name, etc.
+ * @access  Private (manage_bookings, view_bookings)
+ */
+router.get(
+  '/search',
+  authorize('manage_bookings', 'view_bookings'),
+  searchValidation,
+  searchBookings
+);
 
 /**
  * @route   GET /api/v1/bookings/statistics
