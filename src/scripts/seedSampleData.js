@@ -185,12 +185,21 @@ const run = async () => {
     const bookings = await Booking.insertMany(sampleBookings);
 
     // Update room statuses based on bookings
-    for (const booking of bookings) {
+    const bulkOperations = bookings.map((booking) => {
       let status = 'available';
       if (booking.status === 'confirmed') status = 'reserved';
       if (booking.status === 'checked-in') status = 'occupied';
 
-      await Room.findByIdAndUpdate(booking.room, { status });
+      return {
+        updateOne: {
+          filter: { _id: booking.room },
+          update: { status }
+        }
+      };
+    });
+
+    if (bulkOperations.length > 0) {
+      await Room.bulkWrite(bulkOperations);
     }
 
     // Create invoices for paid/partial bookings
