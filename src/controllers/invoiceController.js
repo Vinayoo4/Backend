@@ -13,7 +13,7 @@ const { escapeRegex, sanitizeSortField } = require('../utils/sanitize');
 
 /**
  * Generate unique invoice number
- * Format: INV-YYYYMMDD-XXXX
+ * Format: INV-YYYYMMDD-SSSS (4-digit daily sequence)
  * @returns {Promise<string>}
  */
 const generateInvoiceNumber = async () => {
