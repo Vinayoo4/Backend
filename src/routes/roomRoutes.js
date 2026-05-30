@@ -14,7 +14,7 @@ const {
   deleteRoom,
   checkAvailability,
   updateRoomStatus,
-  getRoomStatistics
+  getRoomStatistics,
   // TODO: Implement these functions in roomController.js
   // getRoomAvailabilityCalendar,
   // assignRoomToBooking,
@@ -24,7 +24,7 @@ const {
   // uploadRoomImages,
   // deleteRoomImage,
   // getRoomRevenue,
-  // bulkUpdateRoomStatus,
+  bulkUpdateRoomStatus
   // getOccupancyReport
 } = require('../controllers/roomController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
@@ -263,7 +263,7 @@ const _maintenanceValidation = [
   handleValidationErrors
 ];
 
-const _bulkStatusUpdateValidation = [
+const bulkStatusUpdateValidation = [
   body('roomIds')
     .isArray({ min: 1 })
     .withMessage('Room IDs array is required with at least one ID'),
@@ -355,18 +355,17 @@ router.post(
   checkAvailability
 );
 
-// TODO: Implement this function in roomController.js
-// /**
-//  * @route   PUT /api/v1/rooms/bulk-update-status
-//  * @desc    Bulk update room status
-//  * @access  Private (manage_rooms, admin, manager)
-//  */
-// router.put(
-//   '/bulk-update-status',
-//   authorize('manage_rooms'),
-//   bulkStatusUpdateValidation,
-//   bulkUpdateRoomStatus
-// );
+/**
+ * @route   PUT /api/v1/rooms/bulk-update-status
+ * @desc    Bulk update room status
+ * @access  Private (manage_rooms, admin, manager)
+ */
+router.put(
+  '/bulk-update-status',
+  authorize('manage_rooms'),
+  bulkStatusUpdateValidation,
+  bulkUpdateRoomStatus
+);
 
 /**
  * @route   GET /api/v1/rooms/:id
