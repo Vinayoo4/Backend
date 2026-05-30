@@ -513,6 +513,95 @@ const deleteInvoice = async (req, res) => {
 };
 
 /**
+ * @desc    Duplicate an existing invoice
+ * @route   POST /api/v1/invoices/:id/duplicate
+ * @access  Private (manage_invoices)
+ */
+const duplicateInvoice = async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid invoice ID'
+      });
+    }
+
+    const originalInvoice = await Invoice.findById(req.params.id);
+
+    if (!originalInvoice) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invoice not found'
+      });
+    }
+
+    // Convert to plain object to manipulate and create a new instance
+    const invoiceData = originalInvoice.toObject();
+
+    // Remove properties that should not be duplicated
+    delete invoiceData._id;
+    delete invoiceData.id;
+    delete invoiceData.invoiceNumber;
+    delete invoiceData.createdAt;
+    delete invoiceData.updatedAt;
+    delete invoiceData.paidAt;
+    delete invoiceData.approvedAt;
+    delete invoiceData.emailSentAt;
+    delete invoiceData.pdfGeneratedAt;
+    delete invoiceData.pdfUrl;
+    delete invoiceData.approvedBy;
+
+    // Reset status and payment properties
+    invoiceData.status = 'draft';
+    invoiceData.paidAmount = 0;
+    invoiceData.paymentMethod = 'cash';
+    delete invoiceData.paymentReference;
+    invoiceData.emailSent = false;
+    delete invoiceData.emailSentTo;
+
+    // Remove _id from items so they get new ObjectIds
+    if (invoiceData.items && invoiceData.items.length > 0) {
+      invoiceData.items.forEach(item => {
+        delete item._id;
+        delete item.id;
+      });
+    }
+
+    // Set audit properties
+    if (req.user && req.user.id) {
+      invoiceData.createdBy = req.user.id;
+      invoiceData.updatedBy = req.user.id;
+    }
+
+    // Reset dates
+    invoiceData.issueDate = new Date();
+    delete invoiceData.dueDate; // Will be auto-calculated if paymentTerms exists
+
+    const newInvoice = new Invoice(invoiceData);
+    await newInvoice.save();
+
+    logger.info(`Invoice duplicated: ${newInvoice._id} from ${originalInvoice._id} by user: ${req.user?.id || 'system'}`);
+
+    res.status(201).json({
+      success: true,
+      data: newInvoice
+    });
+  } catch (error) {
+    logger.error('Duplicate invoice error:', {
+      error: error.message,
+      stack: error.stack,
+      invoiceId: req.params.id
+    });
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to duplicate invoice',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
  * @desc    Generate invoice PDF
  * @route   GET /api/v1/invoices/:id/pdf
  * @access  Private
@@ -776,4 +865,5 @@ module.exports = {
   generateInvoicePDF,
   markAsPaid,
   markAsCancelled,
+  duplicateInvoice,
 };
