@@ -595,6 +595,378 @@ const getRoomStatistics = async (req, res) => {
   }
 };
 
+
+/**
+ * @desc    Get room availability calendar for month
+ * @route   GET /api/v1/rooms/:id/availability
+ * @access  Private
+ */
+const getRoomAvailabilityCalendar = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+
+    const room = await Room.findById(id);
+    if (!room) {
+      return res.status(404).json({ success: false, message: 'Room not found' });
+    }
+
+    const bookings = await Booking.find({
+      room: id,
+      status: { $in: ['confirmed', 'checked-in'] },
+      $or: [
+        { checkInDate: { $lte: endDate }, checkOutDate: { $gte: startDate } }
+      ]
+    }).select('checkInDate checkOutDate status');
+
+    res.json({
+      success: true,
+      data: {
+        roomId: id,
+        month,
+        year,
+        bookings
+      }
+    });
+  } catch (error) {
+    logger.error('Get room availability calendar error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get room availability calendar',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Assign room to booking
+ * @route   POST /api/v1/rooms/:id/assign
+ * @access  Private
+ */
+const assignRoomToBooking = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { bookingId } = req.body;
+
+    const room = await Room.findById(id);
+    if (!room) {
+      return res.status(404).json({ success: false, message: 'Room not found' });
+    }
+
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    // Check availability
+    const isAvailable = await Booking.checkAvailability(id, booking.checkInDate, booking.checkOutDate, bookingId);
+    if (!isAvailable) {
+      return res.status(400).json({ success: false, message: 'Room is not available for this booking dates' });
+    }
+
+    booking.room = id;
+    await booking.save();
+
+    // Optionally update room status if checking in today
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const checkIn = new Date(booking.checkInDate);
+    checkIn.setHours(0,0,0,0);
+
+    if (checkIn.getTime() === today.getTime() && room.status === 'available') {
+        room.status = 'reserved';
+        await room.save();
+    }
+
+    res.json({
+      success: true,
+      message: 'Room assigned to booking successfully',
+      data: { booking }
+    });
+  } catch (error) {
+    logger.error('Assign room to booking error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to assign room to booking',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Add maintenance record
+ * @route   POST /api/v1/rooms/:id/maintenance
+ * @access  Private
+ */
+const addMaintenanceRecord = async (req, res) => {
+  try {
+    const room = await Room.findById(req.params.id);
+    if (!room) {
+      return res.status(404).json({ success: false, message: 'Room not found' });
+    }
+
+    await room.addMaintenance(req.body, req.user.id);
+
+    res.status(201).json({
+      success: true,
+      message: 'Maintenance record added successfully',
+      data: { room }
+    });
+  } catch (error) {
+    logger.error('Add maintenance record error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to add maintenance record',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Update maintenance record
+ * @route   PUT /api/v1/rooms/:id/maintenance/:maintenanceId
+ * @access  Private
+ */
+const updateMaintenanceRecord = async (req, res) => {
+  try {
+    const { id, maintenanceId } = req.params;
+    const room = await Room.findById(id);
+
+    if (!room) {
+      return res.status(404).json({ success: false, message: 'Room not found' });
+    }
+
+    const record = room.maintenanceSchedule.id(maintenanceId);
+    if (!record) {
+      return res.status(404).json({ success: false, message: 'Maintenance record not found' });
+    }
+
+    if (req.body.status) record.status = req.body.status;
+    if (req.body.completedDate) record.completedDate = req.body.completedDate;
+    if (req.body.cost !== undefined) record.cost = req.body.cost;
+    if (req.body.notes) record.notes = req.body.notes;
+
+    if (record.status === 'completed' && room.status === 'maintenance') {
+      room.status = 'available';
+    }
+
+    await room.save();
+
+    res.json({
+      success: true,
+      message: 'Maintenance record updated successfully',
+      data: { record }
+    });
+  } catch (error) {
+    logger.error('Update maintenance record error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update maintenance record',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Get maintenance schedule for room
+ * @route   GET /api/v1/rooms/:id/maintenance
+ * @access  Private
+ */
+const getMaintenanceSchedule = async (req, res) => {
+  try {
+    const room = await Room.findById(req.params.id);
+    if (!room) {
+      return res.status(404).json({ success: false, message: 'Room not found' });
+    }
+
+    res.json({
+      success: true,
+      data: { maintenanceSchedule: room.maintenanceSchedule }
+    });
+  } catch (error) {
+    logger.error('Get maintenance schedule error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get maintenance schedule',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Upload room images
+ * @route   POST /api/v1/rooms/:id/images
+ * @access  Private
+ */
+const uploadRoomImages = async (req, res) => {
+  try {
+    const room = await Room.findById(req.params.id);
+    if (!room) {
+      return res.status(404).json({ success: false, message: 'Room not found' });
+    }
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ success: false, message: 'No images uploaded' });
+    }
+
+    const newImages = req.files.map(file => ({
+      url: `/uploads/images/${file.filename}`,
+      caption: file.originalname
+    }));
+
+    room.images.push(...newImages);
+    await room.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Images uploaded successfully',
+      data: { images: room.images }
+    });
+  } catch (error) {
+    logger.error('Upload room images error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload room images',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Delete room image
+ * @route   DELETE /api/v1/rooms/:id/images/:imageId
+ * @access  Private
+ */
+const deleteRoomImage = async (req, res) => {
+  try {
+    const { id, imageId } = req.params;
+    const room = await Room.findById(id);
+
+    if (!room) {
+      return res.status(404).json({ success: false, message: 'Room not found' });
+    }
+
+    const image = room.images.id(imageId);
+    if (!image) {
+      return res.status(404).json({ success: false, message: 'Image not found' });
+    }
+
+    room.images.pull(imageId);
+    await room.save();
+
+    res.json({
+      success: true,
+      message: 'Image deleted successfully'
+    });
+  } catch (error) {
+    logger.error('Delete room image error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete room image',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Get room revenue
+ * @route   GET /api/v1/rooms/:id/revenue
+ * @access  Private
+ */
+const getRoomRevenue = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { startDate, endDate } = req.query;
+
+    const room = await Room.findById(id);
+    if (!room) {
+      return res.status(404).json({ success: false, message: 'Room not found' });
+    }
+
+    const revenue = await room.calculateRevenue(new Date(startDate), new Date(endDate));
+
+    res.json({
+      success: true,
+      data: { roomId: id, revenue, startDate, endDate }
+    });
+  } catch (error) {
+    logger.error('Get room revenue error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get room revenue',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Bulk update room status
+ * @route   PUT /api/v1/rooms/bulk-update-status
+ * @access  Private
+ */
+const bulkUpdateRoomStatus = async (req, res) => {
+  try {
+    const { roomIds, status } = req.body;
+
+    if (!roomIds || !Array.isArray(roomIds) || roomIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'roomIds array is required' });
+    }
+
+    await Room.updateMany(
+      { _id: { $in: roomIds } },
+      { $set: { status, updatedAt: new Date(), updatedBy: req.user.id } }
+    );
+
+    res.json({
+      success: true,
+      message: `Successfully updated status for ${roomIds.length} rooms`
+    });
+  } catch (error) {
+    logger.error('Bulk update room status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to bulk update room status',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * @desc    Get occupancy report
+ * @route   GET /api/v1/rooms/occupancy-report
+ * @access  Private
+ */
+const getOccupancyReport = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (start > end) {
+        return res.status(400).json({ success: false, message: 'Start date must be before end date' });
+    }
+
+    const stats = await Room.getOccupancyStats(start, end);
+
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    logger.error('Get occupancy report error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get occupancy report',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 module.exports = {
   getRooms,
   getRoom,
@@ -603,5 +975,15 @@ module.exports = {
   deleteRoom,
   checkAvailability,
   updateRoomStatus,
-  getRoomStatistics
+  getRoomStatistics,
+  getRoomAvailabilityCalendar,
+  assignRoomToBooking,
+  addMaintenanceRecord,
+  updateMaintenanceRecord,
+  getMaintenanceSchedule,
+  uploadRoomImages,
+  deleteRoomImage,
+  getRoomRevenue,
+  bulkUpdateRoomStatus,
+  getOccupancyReport
 };

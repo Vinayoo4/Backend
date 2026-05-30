@@ -14,21 +14,20 @@ const {
   deleteRoom,
   checkAvailability,
   updateRoomStatus,
-  getRoomStatistics
-  // TODO: Implement these functions in roomController.js
-  // getRoomAvailabilityCalendar,
-  // assignRoomToBooking,
-  // addMaintenanceRecord,
-  // updateMaintenanceRecord,
-  // getMaintenanceSchedule,
-  // uploadRoomImages,
-  // deleteRoomImage,
-  // getRoomRevenue,
-  // bulkUpdateRoomStatus,
-  // getOccupancyReport
+  getRoomStatistics,
+  getRoomAvailabilityCalendar,
+  assignRoomToBooking,
+  addMaintenanceRecord,
+  updateMaintenanceRecord,
+  getMaintenanceSchedule,
+  uploadRoomImages,
+  deleteRoomImage,
+  getRoomRevenue,
+  bulkUpdateRoomStatus,
+  getOccupancyReport
 } = require('../controllers/roomController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
-const { _uploadMultiple } = require('../middlewares/uploadMiddleware');
+const { uploadMultiple } = require('../middlewares/uploadMiddleware');
 const { handleValidationErrors } = require('../middlewares/errorMiddleware');
 
 const router = express.Router();
@@ -327,21 +326,21 @@ router.get(
   getRoomStatistics
 );
 
-// /**
-//  * @route   GET /api/v1/rooms/occupancy-report
-//  * @desc    Get occupancy report for date range
-//  * @access  Private (manage_rooms, view_analytics)
-//  */
-// router.get(
-//   '/occupancy-report',
-//   authorize('manage_rooms', 'view_analytics'),
-//   [
-//     query('startDate').isISO8601().withMessage('Valid start date is required'),
-//     query('endDate').isISO8601().withMessage('Valid end date is required'),
-//     handleValidationErrors
-//   ],
-//   getOccupancyReport
-// );
+/**
+ * @route   GET /api/v1/rooms/occupancy-report
+ * @desc    Get occupancy report for date range
+ * @access  Private (manage_rooms, view_analytics)
+ */
+router.get(
+  '/occupancy-report',
+  authorize('manage_rooms', 'view_analytics'),
+  [
+    query('startDate').isISO8601().withMessage('Valid start date is required'),
+    query('endDate').isISO8601().withMessage('Valid end date is required'),
+    handleValidationErrors
+  ],
+  getOccupancyReport
+);
 
 /**
  * @route   POST /api/v1/rooms/check-availability
@@ -355,18 +354,17 @@ router.post(
   checkAvailability
 );
 
-// TODO: Implement this function in roomController.js
-// /**
-//  * @route   PUT /api/v1/rooms/bulk-update-status
-//  * @desc    Bulk update room status
-//  * @access  Private (manage_rooms, admin, manager)
-//  */
-// router.put(
-//   '/bulk-update-status',
-//   authorize('manage_rooms'),
-//   bulkStatusUpdateValidation,
-//   bulkUpdateRoomStatus
-// );
+/**
+ * @route   PUT /api/v1/rooms/bulk-update-status
+ * @desc    Bulk update room status
+ * @access  Private (manage_rooms, admin, manager)
+ */
+router.put(
+  '/bulk-update-status',
+  authorize('manage_rooms'),
+  _bulkStatusUpdateValidation,
+  bulkUpdateRoomStatus
+);
 
 /**
  * @route   GET /api/v1/rooms/:id
@@ -419,135 +417,132 @@ router.put(
   updateRoomStatus
 );
 
-// /**
-//  * @route   POST /api/v1/rooms/:id/assign
-//  * @desc    Assign room to booking
-//  * @access  Private (manage_rooms, manage_bookings)
-//  */
-// router.post(
-//   '/:id/assign',
-//   authorize('manage_rooms', 'manage_bookings'),
-//   [
-//     param('id').isMongoId().withMessage('Invalid room ID'),
-//     body('bookingId').isMongoId().withMessage('Valid booking ID is required'),
-//     handleValidationErrors
-//   ],
-//   assignRoomToBooking
-// );
+/**
+ * @route   POST /api/v1/rooms/:id/assign
+ * @desc    Assign room to booking
+ * @access  Private (manage_rooms, manage_bookings)
+ */
+router.post(
+  '/:id/assign',
+  authorize('manage_rooms', 'manage_bookings'),
+  [
+    param('id').isMongoId().withMessage('Invalid room ID'),
+    body('bookingId').isMongoId().withMessage('Valid booking ID is required'),
+    handleValidationErrors
+  ],
+  assignRoomToBooking
+);
 
 // ========== Room Availability & Calendar Routes ==========
-// TODO: Implement these functions in roomController.js
 
-// /**
-//  * @route   GET /api/v1/rooms/:id/availability
-//  * @desc    Get room availability calendar for month
-//  * @access  Private (manage_rooms, view_bookings)
-//  */
-// router.get(
-//   '/:id/availability',
-//   authorize('manage_rooms', 'view_bookings'),
-//   [
-//     param('id').isMongoId().withMessage('Invalid room ID'),
-//     query('month').optional().isInt({ min: 1, max: 12 }),
-//     query('year').optional().isInt({ min: 2020, max: 2100 }),
-//     handleValidationErrors
-//   ],
-//   getRoomAvailabilityCalendar
-// );
+/**
+ * @route   GET /api/v1/rooms/:id/availability
+ * @desc    Get room availability calendar for month
+ * @access  Private (manage_rooms, view_bookings)
+ */
+router.get(
+  '/:id/availability',
+  authorize('manage_rooms', 'view_bookings'),
+  [
+    param('id').isMongoId().withMessage('Invalid room ID'),
+    query('month').optional().isInt({ min: 1, max: 12 }),
+    query('year').optional().isInt({ min: 2020, max: 2100 }),
+    handleValidationErrors
+  ],
+  getRoomAvailabilityCalendar
+);
 
-// /**
-//  * @route   GET /api/v1/rooms/:id/revenue
-//  * @desc    Get room revenue for date range
-//  * @access  Private (manage_rooms, view_analytics)
-//  */
-// router.get(
-//   '/:id/revenue',
-//   authorize('manage_rooms', 'view_analytics'),
-//   [
-//     param('id').isMongoId().withMessage('Invalid room ID'),
-//     query('startDate').isISO8601().withMessage('Valid start date is required'),
-//     query('endDate').isISO8601().withMessage('Valid end date is required'),
-//     handleValidationErrors
-//   ],
-//   getRoomRevenue
-// );
+/**
+ * @route   GET /api/v1/rooms/:id/revenue
+ * @desc    Get room revenue for date range
+ * @access  Private (manage_rooms, view_analytics)
+ */
+router.get(
+  '/:id/revenue',
+  authorize('manage_rooms', 'view_analytics'),
+  [
+    param('id').isMongoId().withMessage('Invalid room ID'),
+    query('startDate').isISO8601().withMessage('Valid start date is required'),
+    query('endDate').isISO8601().withMessage('Valid end date is required'),
+    handleValidationErrors
+  ],
+  getRoomRevenue
+);
 
 // ========== Room Maintenance Routes ==========
-// TODO: Implement these functions in roomController.js
 
-// /**
-//  * @route   GET /api/v1/rooms/:id/maintenance
-//  * @desc    Get maintenance schedule for room
-//  * @access  Private (manage_rooms)
-//  */
-// router.get(
-//   '/:id/maintenance',
-//   authorize('manage_rooms'),
-//   ...mongoIdValidation,
-//   getMaintenanceSchedule
-// );
+/**
+ * @route   GET /api/v1/rooms/:id/maintenance
+ * @desc    Get maintenance schedule for room
+ * @access  Private (manage_rooms)
+ */
+router.get(
+  '/:id/maintenance',
+  authorize('manage_rooms'),
+  ...mongoIdValidation,
+  getMaintenanceSchedule
+);
 
-// /**
-//  * @route   POST /api/v1/rooms/:id/maintenance
-//  * @desc    Add maintenance record
-//  * @access  Private (manage_rooms)
-//  */
-// router.post(
-//   '/:id/maintenance',
-//   authorize('manage_rooms'),
-//   maintenanceValidation,
-//   addMaintenanceRecord
-// );
+/**
+ * @route   POST /api/v1/rooms/:id/maintenance
+ * @desc    Add maintenance record
+ * @access  Private (manage_rooms)
+ */
+router.post(
+  '/:id/maintenance',
+  authorize('manage_rooms'),
+  _maintenanceValidation,
+  addMaintenanceRecord
+);
 
-// /**
-//  * @route   PUT /api/v1/rooms/:id/maintenance/:maintenanceId
-//  * @desc    Update maintenance record
-//  * @access  Private (manage_rooms)
-//  */
-// router.put(
-//   '/:id/maintenance/:maintenanceId',
-//   authorize('manage_rooms'),
-//   [
-//     param('id').isMongoId().withMessage('Invalid room ID'),
-//     param('maintenanceId').isMongoId().withMessage('Invalid maintenance ID'),
-//     body('status').optional().isIn(['scheduled', 'in-progress', 'completed', 'cancelled', 'on-hold']),
-//     body('completedDate').optional().isISO8601(),
-//     body('cost').optional().isFloat({ min: 0 }),
-//     handleValidationErrors
-//   ],
-//   updateMaintenanceRecord
-// );
+/**
+ * @route   PUT /api/v1/rooms/:id/maintenance/:maintenanceId
+ * @desc    Update maintenance record
+ * @access  Private (manage_rooms)
+ */
+router.put(
+  '/:id/maintenance/:maintenanceId',
+  authorize('manage_rooms'),
+  [
+    param('id').isMongoId().withMessage('Invalid room ID'),
+    param('maintenanceId').isMongoId().withMessage('Invalid maintenance ID'),
+    body('status').optional().isIn(['scheduled', 'in-progress', 'completed', 'cancelled', 'on-hold']),
+    body('completedDate').optional().isISO8601(),
+    body('cost').optional().isFloat({ min: 0 }),
+    handleValidationErrors
+  ],
+  updateMaintenanceRecord
+);
 
 // ========== Room Image Management Routes ==========
-// TODO: Implement these functions in roomController.js
 
-// /**
-//  * @route   POST /api/v1/rooms/:id/images
-//  * @desc    Upload room images
-//  * @access  Private (manage_rooms)
-//  */
-// router.post(
-//   '/:id/images',
-//   authorize('manage_rooms'),
-//   ...mongoIdValidation,
-//   uploadMultiple('images', 5),
-//   uploadRoomImages
-// );
+/**
+ * @route   POST /api/v1/rooms/:id/images
+ * @desc    Upload room images
+ * @access  Private (manage_rooms)
+ */
+router.post(
+  '/:id/images',
+  authorize('manage_rooms'),
+  ...mongoIdValidation,
+  uploadMultiple('images', 5),
+  uploadRoomImages
+);
 
-// /**
-//  * @route   DELETE /api/v1/rooms/:id/images/:imageId
-//  * @desc    Delete room image
-//  * @access  Private (manage_rooms)
-//  */
-// router.delete(
-//   '/:id/images/:imageId',
-//   authorize('manage_rooms'),
-//   [
-//     param('id').isMongoId().withMessage('Invalid room ID'),
-//     param('imageId').isMongoId().withMessage('Invalid image ID'),
-//     handleValidationErrors
-//   ],
-//   deleteRoomImage
-// );
+/**
+ * @route   DELETE /api/v1/rooms/:id/images/:imageId
+ * @desc    Delete room image
+ * @access  Private (manage_rooms)
+ */
+router.delete(
+  '/:id/images/:imageId',
+  authorize('manage_rooms'),
+  [
+    param('id').isMongoId().withMessage('Invalid room ID'),
+    param('imageId').isMongoId().withMessage('Invalid image ID'),
+    handleValidationErrors
+  ],
+  deleteRoomImage
+);
 
 module.exports = router;
